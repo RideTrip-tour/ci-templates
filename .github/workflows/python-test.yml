@@ -1,0 +1,59 @@
+name: Python Tests
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        type: string
+        default: "3.12"
+      pip-version:
+        type: string
+        default: "25.0.1"
+      requirements-file:
+        type: string
+        default: "requirements.test.txt"
+      coverage-source:
+        type: string
+        default: "app"
+      coverage-min:
+        type: number
+        default: 90
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+          cache-dependency-path: ${{ inputs.requirements-file }}
+      - name: Install pip
+        env:
+          PIP_VERSION: ${{ inputs.pip-version }}
+        run: python -m pip install "pip==$PIP_VERSION"
+      - name: Install dependencies
+        env:
+          REQUIREMENTS_FILE: ${{ inputs.requirements-file }}
+        run: python -m pip install -r "$REQUIREMENTS_FILE"
+      - name: Run pytest with coverage
+        env:
+          COVERAGE_SOURCE: ${{ inputs.coverage-source }}
+          COVERAGE_MIN: ${{ inputs.coverage-min }}
+        run: |
+          pytest \
+            --cov="$COVERAGE_SOURCE" \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-fail-under="$COVERAGE_MIN"
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 14
+          if-no-files-found: warn
