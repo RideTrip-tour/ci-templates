@@ -1,0 +1,90 @@
+name: Docker Swarm Healthcheck
+
+on:
+  workflow_call:
+    inputs:
+      service-name:
+        type: string
+        required: true
+      app-name:
+        type: string
+        required: true
+      data-network:
+        type: string
+        default: data-network
+      service-port:
+        type: number
+        default: 8000
+      environment:
+        type: string
+        default: DEV
+    secrets:
+      SWARM_SSH_PRIVATE_KEY:
+        required: true
+      SWARM_HOST:
+        required: true
+      SWARM_USER:
+        required: true
+      SWARM_KNOWN_HOSTS:
+        required: true
+
+jobs:
+  healthcheck:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    steps:
+      - name: Trust pinned SSH host key
+        env:
+          KNOWN_HOSTS: ${{ secrets.SWARM_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SWARM_SSH_PRIVATE_KEY }}
+      - name: Configure remote Docker
+        env:
+          SWARM_HOST: ${{ secrets.SWARM_HOST }}
+          SWARM_USER: ${{ secrets.SWARM_USER }}
+        run: |
+          docker context create swarm --docker "host=ssh://${SWARM_USER}@${SWARM_HOST}"
+          docker --context swarm info
+      - name: Probe HTTP health endpoint inside overlay network
+        env:
+          SERVICE_NAME: ${{ inputs.service-name }}
+          APP_NAME: ${{ inputs.app-name }}
+          DATA_NETWORK: ${{ inputs.data-network }}
+          SERVICE_PORT: ${{ inputs.service-port }}
+        run: |
+          set -euo pipefail
+          health_job="${SERVICE_NAME}-healthcheck-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() { docker --context swarm service rm "$health_job" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          cleanup
+          health_url="http://${SERVICE_NAME}:${SERVICE_PORT}/${APP_NAME}/health"
+          echo "Healthcheck URL: $health_url"
+          docker --context swarm service create \
+            --name "$health_job" \
+            --detach=false \
+            --restart-condition none \
+            --mode replicated-job \
+            --network "$DATA_NETWORK" \
+            --env "HEALTHCHECK_URL=$health_url" \
+            --entrypoint sh \
+            curlimages/curl:8.10.1 \
+            -c '
+              for i in $(seq 1 30); do
+                echo "Healthcheck attempt $i/30"
+                if curl --fail --silent --show-error --max-time 5 "$HEALTHCHECK_URL"; then
+                  echo "Healthcheck passed"
+                  exit 0
+                fi
+                sleep 5
+              done
+              echo "Healthcheck failed"
+              exit 1
+            '
