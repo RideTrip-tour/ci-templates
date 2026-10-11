@@ -1,0 +1,68 @@
+name: Telegram CI Notification
+
+on:
+  workflow_call:
+    inputs:
+      service-name:
+        required: true
+        type: string
+      environment:
+        type: string
+        default: DEV
+      results-json:
+        required: true
+        type: string
+      image-ref:
+        type: string
+        default: ""
+      swarm-service:
+        type: string
+        default: ""
+    secrets:
+      TELEGRAM_BOT_TOKEN:
+        required: true
+      TELEGRAM_CHAT_ID:
+        required: true
+      TELEGRAM_DEPLOY_THREAD_ID:
+        required: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Send deployment result
+        env:
+          RESULTS_JSON: ${{ inputs.results-json }}
+          SERVICE_NAME: ${{ inputs.service-name }}
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+          IMAGE_REF: ${{ inputs.image-ref }}
+          SWARM_SERVICE: ${{ inputs.swarm-service }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_DEPLOY_THREAD_ID: ${{ secrets.TELEGRAM_DEPLOY_THREAD_ID }}
+        run: |
+          set -euo pipefail
+          failed_jobs="$(jq -r '[to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key] | join(", ")' <<< "$RESULTS_JSON")"
+          if [[ -n "$failed_jobs" ]]; then
+            header="❌ PIPELINE FAILED"
+            stage="Failed stages: $failed_jobs"
+          else
+            header="✅ PIPELINE SUCCESS"
+            stage="All required stages passed"
+          fi
+          short_sha="${GITHUB_SHA::7}"
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          message="$(printf '%s\n\nService: %s\nEnvironment: %s\nCommit: %s\nBranch: %s\n%s\nImage: %s\nSwarm service: %s\nTriggered by: %s\nGitHub: %s' \
+            "$header" "$SERVICE_NAME" "$DEPLOY_ENVIRONMENT" "$short_sha" "$GITHUB_REF_NAME" "$stage" "$IMAGE_REF" "$SWARM_SERVICE" "$GITHUB_ACTOR" "$run_url")"
+          args=(--fail-with-body --silent --show-error --request POST
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
+            --data-urlencode "chat_id=$TELEGRAM_CHAT_ID"
+            --data-urlencode "text=$message")
+          if [[ -n "$TELEGRAM_DEPLOY_THREAD_ID" ]]; then
+            args+=(--data-urlencode "message_thread_id=$TELEGRAM_DEPLOY_THREAD_ID")
+          fi
+          if ! curl "${args[@]}"; then
+            echo "::warning::Telegram notification failed"
+          fi
