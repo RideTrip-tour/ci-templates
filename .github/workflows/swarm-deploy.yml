@@ -1,0 +1,68 @@
+name: Docker Swarm Deploy
+
+on:
+  workflow_call:
+    inputs:
+      image-ref:
+        type: string
+        required: true
+      swarm-service:
+        type: string
+        required: true
+      environment:
+        type: string
+        default: DEV
+    secrets:
+      SWARM_SSH_PRIVATE_KEY:
+        required: true
+      SWARM_HOST:
+        required: true
+      SWARM_USER:
+        required: true
+      SWARM_KNOWN_HOSTS:
+        required: true
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    steps:
+      - name: Trust pinned SSH host key
+        env:
+          KNOWN_HOSTS: ${{ secrets.SWARM_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SWARM_SSH_PRIVATE_KEY }}
+      - name: Configure remote Docker
+        env:
+          SWARM_HOST: ${{ secrets.SWARM_HOST }}
+          SWARM_USER: ${{ secrets.SWARM_USER }}
+        run: |
+          docker context create swarm --docker "host=ssh://${SWARM_USER}@${SWARM_HOST}"
+          docker --context swarm info
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Roll out image
+        env:
+          IMAGE_REF: ${{ inputs.image-ref }}
+          SWARM_SERVICE: ${{ inputs.swarm-service }}
+        run: |
+          set -euo pipefail
+          docker --context swarm service update \
+            --with-registry-auth \
+            --detach=false \
+            --image "$IMAGE_REF" \
+            "$SWARM_SERVICE"
