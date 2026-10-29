@@ -1,0 +1,67 @@
+name: Docker Build and Push
+
+on:
+  workflow_call:
+    inputs:
+      namespace:
+        type: string
+        required: true
+      service-name:
+        type: string
+        required: true
+      tag-prefix:
+        type: string
+        default: dev
+      context:
+        type: string
+        default: .
+      dockerfile:
+        type: string
+        default: Dockerfile
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
+    outputs:
+      image-ref:
+        description: Immutable SHA-based Docker image reference
+        value: ${{ jobs.build.outputs.image-ref }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      image-ref: ${{ steps.image.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Compute image tags
+        id: image
+        env:
+          NAMESPACE: ${{ inputs.namespace }}
+          SERVICE: ${{ inputs.service-name }}
+          TAG_PREFIX: ${{ inputs.tag-prefix }}
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA::7}"
+          ref="${NAMESPACE}/${SERVICE}:${TAG_PREFIX}-${short_sha}"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "latest_ref=${NAMESPACE}/${SERVICE}:${TAG_PREFIX}" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          push: true
+          tags: |
+            ${{ steps.image.outputs.ref }}
+            ${{ steps.image.outputs.latest_ref }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
