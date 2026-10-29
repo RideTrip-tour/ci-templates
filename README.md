@@ -10,7 +10,8 @@ Reusable CI/CD workflows for RideTrip-tour microservices. Place a small calling 
 | `python-mypy.yml` | Mypy type checking |
 | `python-test.yml` | Pytest + coverage and XML artifact |
 | `docker-build-push.yml` | Docker Hub build/push; exports `image-ref` |
-| `swarm-alembic-check.yml` | Runs `alembic check` against the current database before migrations |\n| `swarm-migrate.yml` | Docker Swarm replicated migration job |
+| `swarm-alembic-check.yml` | Runs `alembic check` against the current database before migrations |
+| `swarm-migrate.yml` | Docker Swarm replicated migration job |
 | `swarm-deploy.yml` | Swarm service update |
 | `swarm-healthcheck.yml` | HTTP health probe inside overlay network |
 | `telegram-notify.yml` | Telegram success/failure notification |
