@@ -57,15 +57,26 @@ jobs:
       tag-prefix: dev
     secrets: inherit
 
-  migrate:
+  alembic_check:
     needs: build
-    uses: RideTrip-tour/ci-templates/.github/workflows/swarm-migrate.yml@feat/swarm-deployment-reusable-workflows
+    uses: RideTrip-tour/ci-templates/.github/workflows/swarm-alembic-check.yml@feat/swarm-alembic-check
     with:
       service-name: ${{ vars.SERVICE_NAME || 'auth-service' }}
       image-ref: ${{ needs.build.outputs.image-ref }}
       data-network: ${{ vars.DATA_NETWORK || 'data-network' }}
       db-secret-prefix: DB_AUTH_SERVICE
       db-env-prefix: DB_AUTH_SERVICE
+      environment: DEV
+    secrets: inherit
+
+  migrate:
+    needs: [build, alembic_check]
+    uses: RideTrip-tour/ci-templates/.github/workflows/swarm-migrate.yml@feat/swarm-deployment-reusable-workflows
+    with:
+      service-name: ${{ vars.SERVICE_NAME || 'auth-service' }}
+      image-ref: ${{ needs.build.outputs.image-ref }}
+      data-network: ${{ vars.DATA_NETWORK || 'data-network' }}
+      db-secret-prefix: DB_AUTH_SERVICE
       environment: DEV
     secrets: inherit
 
