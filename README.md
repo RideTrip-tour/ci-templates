@@ -66,7 +66,6 @@ jobs:
       image-ref: ${{ needs.build.outputs.image-ref }}
       data-network: ${{ vars.DATA_NETWORK || 'data-network' }}
       db-secret-prefix: DB_AUTH_SERVICE
-      db-env-prefix: DB_AUTH_SERVICE
       environment: DEV
     secrets: inherit
 
@@ -121,7 +120,7 @@ jobs:
 
 **Environment**: Swarm jobs select GitHub environment `DEV`. Configure any environment-scoped secrets/protection rules there. `secrets: inherit` passes available caller secrets to the reusable workflow; environment secrets need to be available to the called job's selected environment.
 
-**Swarm prerequisites**: manager reachable over SSH, Docker CLI available remotely, overlay network (default `data-network`), service (default `apps_auth-service`), Docker registry access, replicated-job mode support, and existing Docker Swarm DB secrets `DB_AUTH_SERVICE_{HOST,PORT,NAME,USER,PASS}`. The Alembic check runs `alembic check` directly in the service image with the DB secrets mounted. Set `db-secret-prefix` to the prefix used in Swarm secret names and `db-env-prefix` to the environment-variable prefix expected by that service; these can differ between microservices. The migration container runs its migration command through its entrypoint when `APP_MODE=migrate` is set. The probe checks `http://<service-name>:8000/<app-name>/health` from the overlay network.
+**Swarm prerequisites**: manager reachable over SSH, Docker CLI available remotely, overlay network (default `data-network`), service (default `apps_auth-service`), Docker registry access, replicated-job mode support, and existing Docker Swarm DB secrets `DB_AUTH_SERVICE_{HOST,PORT,NAME,USER,PASS}`. The Alembic check runs `alembic check` directly in the service image with the DB secrets mounted. Set `db-secret-prefix` to the prefix used in Swarm secret names. The check mounts those secrets under `/run/secrets`; Pydantic Settings reads them directly using the configured validation aliases, so the workflow does not export duplicate environment variables. The migration container runs its migration command through its entrypoint when `APP_MODE=migrate` is set. The probe checks `http://<service-name>:8000/<app-name>/health` from the overlay network.
 
 **Notes**:
 - Test and Ruff run in parallel; Docker build runs only after both pass and only on push, not PR. The Alembic check must pass before migrations; migrations must pass before deployment.
