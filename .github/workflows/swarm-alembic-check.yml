@@ -99,7 +99,6 @@ jobs:
             --mode replicated-job \
             --network "$DATA_NETWORK" \
             "${secret_args[@]}" \
-            --env "DB_SECRET_PREFIX=$DB_SECRET_PREFIX" \
             --with-registry-auth \
             --entrypoint /bin/sh \
             "$IMAGE_REF" \
