@@ -10,6 +10,7 @@ Reusable CI/CD workflows for RideTrip-tour microservices. Place a small calling 
 | `python-mypy.yml` | Mypy type checking |
 | `python-test.yml` | Pytest + coverage and XML artifact |
 | `docker-build-push.yml` | Docker Hub build/push; exports `image-ref` |
+| `swarm-alembic-check.yml` | Runs `alembic check` against the current database before migrations |
 | `swarm-migrate.yml` | Docker Swarm replicated migration job |
 | `swarm-deploy.yml` | Swarm service update |
 | `swarm-healthcheck.yml` | HTTP health probe inside overlay network |
@@ -57,8 +58,19 @@ jobs:
       tag-prefix: dev
     secrets: inherit
 
-  migrate:
+  alembic_check:
     needs: build
+    uses: RideTrip-tour/ci-templates/.github/workflows/swarm-alembic-check.yml@feat/swarm-alembic-check
+    with:
+      service-name: ${{ vars.SERVICE_NAME || 'auth-service' }}
+      image-ref: ${{ needs.build.outputs.image-ref }}
+      data-network: ${{ vars.DATA_NETWORK || 'data-network' }}
+      db-secret-prefix: DB_AUTH_SERVICE
+      environment: DEV
+    secrets: inherit
+
+  migrate:
+    needs: [build, alembic_check]
     uses: RideTrip-tour/ci-templates/.github/workflows/swarm-migrate.yml@feat/swarm-deployment-reusable-workflows
     with:
       service-name: ${{ vars.SERVICE_NAME || 'auth-service' }}
@@ -88,7 +100,7 @@ jobs:
     secrets: inherit
 
   notify:
-    needs: [ruff, tests, build, migrate, deploy, healthcheck]
+    needs: [ruff, tests, build, alembic_check, migrate, deploy, healthcheck]
     if: ${{ always() && (github.event_name == 'push' || contains(needs.*.result, 'failure')) }}
     uses: RideTrip-tour/ci-templates/.github/workflows/telegram-notify.yml@feat/swarm-deployment-reusable-workflows
     with:
@@ -108,10 +120,10 @@ jobs:
 
 **Environment**: Swarm jobs select GitHub environment `DEV`. Configure any environment-scoped secrets/protection rules there. `secrets: inherit` passes available caller secrets to the reusable workflow; environment secrets need to be available to the called job's selected environment.
 
-**Swarm prerequisites**: manager reachable over SSH, Docker CLI available remotely, overlay network (default `data-network`), service (default `apps_auth-service`), Docker registry access, replicated-job mode support, and existing Docker Swarm DB secrets `DB_AUTH_SERVICE_{HOST,PORT,NAME,USER,PASS}`. The migration container is expected to run its migration command through its entrypoint when `APP_MODE=migrate` is set. The probe checks `http://<service-name>:8000/<app-name>/health` from the overlay network.
+**Swarm prerequisites**: manager reachable over SSH, Docker CLI available remotely, overlay network (default `data-network`), service (default `apps_auth-service`), Docker registry access, replicated-job mode support, and existing Docker Swarm DB secrets `DB_AUTH_SERVICE_{HOST,PORT,NAME,USER,PASS}`. The Alembic check runs `alembic check` directly in the service image with the DB secrets mounted. Set `db-secret-prefix` to the prefix used in Swarm secret names. The check mounts those secrets under `/run/secrets`; Pydantic Settings reads them directly using the configured validation aliases, so the workflow does not export duplicate environment variables. The migration container runs its migration command through its entrypoint when `APP_MODE=migrate` is set. The probe checks `http://<service-name>:8000/<app-name>/health` from the overlay network.
 
 **Notes**:
-- Test and Ruff run in parallel; Docker build runs only after both pass and only on push, not PR. Migrations must pass before deployment.
+- Test and Ruff run in parallel; Docker build runs only after both pass and only on push, not PR. The Alembic check must pass before migrations; migrations must pass before deployment.
 - `docker-build-push.yml` publishes both `dev-<sha7>` and `dev`; deployment uses the SHA-specific tag returned as a workflow output. For stronger immutability consider deploying by digest.
 - The success notification is sent after checks, build, migration, rollout and healthcheck. Failures in stages are reported based on `needs`; any skipped stages are not labelled as failed.
 - The original auth-service workflow is **not changed** by this PR. The example above must be applied in auth-service separately after reviewing it.
