@@ -21,7 +21,7 @@ on:
 
       postgres-image:
         type: string
-        default: postgres:18
+        default: kartoza/postgis:18-3.6
 
       working-directory:
         type: string
