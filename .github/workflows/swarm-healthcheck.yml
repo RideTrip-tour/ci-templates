@@ -70,7 +70,7 @@ jobs:
           trap cleanup EXIT
 
           health_url="http://${SERVICE_NAME}:${SERVICE_PORT}/${APP_NAME}/api/health"
-
+          echo "Healthcheck URL: $health_url"
           cleanup
 
           docker --context swarm service create \
@@ -102,26 +102,36 @@ jobs:
             '
 
           # Ждём завершения задачи максимум 180 секунд.
-          for i in $(seq 1 90); do
-            state=$(docker --context swarm service ps \
-              --format '{{.CurrentState}}' "$health_job" | head -n 1)
+          healthcheck_passed=false
 
-            if [[ "$state" == Complete* ]]; then
-              echo "Healthcheck passed"
-              docker --context swarm service logs "$health_job"
-              exit 0
-            fi
+          for i in $(seq 1 20); do
+              echo "Healthcheck attempt ${i}/20"
 
-            if [[ "$state" == Failed* || "$state" == Rejected* ]]; then
-              docker --context swarm service logs "$health_job" || true
-              echo "Healthcheck failed"
-              exit 1
-            fi
+              status=$(curl \
+                  --silent \
+                  --output /dev/null \
+                  --write-out '%{http_code}' \
+                  --connect-timeout 3 \
+                  --max-time 5 \
+                  "$HEALTHCHECK_URL" || true)
 
-            sleep 2
+              if [ "$status" = "200" ]; then
+                  echo "Healthcheck passed"
+                  healthcheck_passed=true
+                  break
+              fi
+
+              echo "Healthcheck failed: HTTP ${status}"
+
+              if [ "$i" -lt 20 ]; then
+                  sleep 5
+              fi
           done
 
-          echo "Healthcheck timed out"
-          docker --context swarm service logs "$health_job" || true
-          exit 1
+          if [ "$healthcheck_passed" = false ]; then
+              echo "Healthcheck failed after 20 attempts"
+              exit 1
+          fi
+
+          exit 0
 
