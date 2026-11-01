@@ -70,11 +70,6 @@ jobs:
         env:
           IMAGE_REF: ${{ steps.image.outputs.ref }}
         run: |
+          set -euo pipefail
           echo "Step output: $IMAGE_REF"
           test -n "$IMAGE_REF"
-
-      - name: Debug job output
-        env:
-          IMAGE_REF: ${{ jobs.build.outputs.image-ref }}
-        run: |
-          echo "Job output: $IMAGE_REF"
