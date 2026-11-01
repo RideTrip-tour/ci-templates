@@ -65,73 +65,69 @@ jobs:
           health_job="${SERVICE_NAME}-healthcheck-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
           cleanup() {
-            docker --context swarm service rm "$health_job" >/dev/null 2>&1 || true
+              docker --context swarm service rm "$health_job" >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
 
           health_url="http://${SERVICE_NAME}:${SERVICE_PORT}/api/${APP_NAME}/health"
+
           echo "Healthcheck URL: $health_url"
-          cleanup
 
           docker --context swarm service create \
-            --name "$health_job" \
-            --restart-condition none \
-            --mode replicated-job \
-            --network "$DATA_NETWORK" \
-            --env "HEALTHCHECK_URL=$health_url" \
-            --entrypoint sh \
-            curlimages/curl:8.10.1 \
-            -c '
-              for i in $(seq 1 30); do
-                echo "Healthcheck attempt $i/30"
+              --name "$health_job" \
+              --restart-condition none \
+              --mode replicated-job \
+              --network "$DATA_NETWORK" \
+              --env "HEALTHCHECK_URL=$health_url" \
+              --entrypoint sh \
+              curlimages/curl:8.10.1 \
+              -c '
+                  for i in $(seq 1 20); do
+                      echo "Healthcheck attempt $i/20"
 
-                status=$(curl -s -o /dev/null -w "%{http_code}" \
-                  --connect-timeout 3 --max-time 5 "$HEALTHCHECK_URL" || true)
+                      status=$(curl -s -o /dev/null -w "%{http_code}" \
+                          --connect-timeout 3 \
+                          --max-time 5 \
+                          "$HEALTHCHECK_URL" || true)
 
-                if [ "$status" = "200" ]; then
-                  echo "Healthcheck passed"
+                      if [ "$status" = "200" ]; then
+                          echo "Healthcheck passed"
+                          exit 0
+                      fi
+
+                      echo "Healthcheck failed: HTTP $status"
+
+                      if [ "$i" -lt 20 ]; then
+                          sleep 5
+                      fi
+                  done
+
+                  echo "Healthcheck failed after 20 attempts"
+                  exit 1
+              '
+
+          # Ожидаем завершения Swarm job максимум 180 секунд.
+          for i in $(seq 1 90); do
+              state=$(docker --context swarm service ps \
+                  --format '{{.CurrentState}}' "$health_job" | head -n 1)
+
+              echo "Swarm job state: ${state:-unknown}"
+
+              if [[ "$state" == Complete* ]]; then
+                  docker --context swarm service logs "$health_job"
+                  echo "Healthcheck job completed successfully"
                   exit 0
-                fi
-
-                echo "Healthcheck failed: HTTP $status"
-                sleep 5
-              done
-
-              echo "Healthcheck failed after 30 attempts"
-              exit 1
-            '
-
-          # Ждём завершения задачи максимум 180 секунд.
-          healthcheck_passed=false
-
-          for i in $(seq 1 20); do
-              echo "Healthcheck attempt ${i}/20"
-
-              status=$(curl \
-                  --silent \
-                  --output /dev/null \
-                  --write-out '%{http_code}' \
-                  --connect-timeout 3 \
-                  --max-time 5 \
-                  "$HEALTHCHECK_URL" || true)
-
-              if [ "$status" = "200" ]; then
-                  echo "Healthcheck passed"
-                  healthcheck_passed=true
-                  break
               fi
 
-              echo "Healthcheck failed: HTTP ${status}"
-
-              if [ "$i" -lt 20 ]; then
-                  sleep 5
+              if [[ "$state" == Failed* || "$state" == Rejected* ]]; then
+                  docker --context swarm service logs "$health_job" || true
+                  echo "Healthcheck job failed"
+                  exit 1
               fi
+
+              sleep 2
           done
 
-          if [ "$healthcheck_passed" = false ]; then
-              echo "Healthcheck failed after 20 attempts"
-              exit 1
-          fi
-
-          exit 0
-
+          echo "Healthcheck timed out after 180 seconds"
+          docker --context swarm service logs "$health_job" || true
+          exit 1
