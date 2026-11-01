@@ -65,3 +65,10 @@ jobs:
             ${{ steps.image.outputs.latest_ref }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Debug image output
+        env:
+          IMAGE_REF: ${{ steps.image.outputs.ref }}
+        run: |
+          echo "Step output: $IMAGE_REF"
+          test -n "$IMAGE_REF"
