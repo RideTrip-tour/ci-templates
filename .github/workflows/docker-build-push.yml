@@ -66,10 +66,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Debug image output
+  debug:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify job output
         env:
-          IMAGE_REF: ${{ steps.image.outputs.ref }}
+          IMAGE_REF: ${{ needs.build.outputs.image-ref }}
         run: |
           set -euo pipefail
-          echo "Step output: $IMAGE_REF"
+          echo "Job output: $IMAGE_REF"
           test -n "$IMAGE_REF"
