@@ -27,9 +27,7 @@ on:
       SWARM_USER:
         required: true
       SWARM_KNOWN_HOSTS:
-        required: true
-      DOCKERHUB_USERNAME:
-        required: true
+        required: true    
       DOCKERHUB_TOKEN:
         required: true
 
@@ -64,7 +62,7 @@ jobs:
 
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Check Alembic autogenerate state
