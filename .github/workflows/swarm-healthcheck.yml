@@ -69,7 +69,7 @@ jobs:
           }
           trap cleanup EXIT
 
-          health_url="http://${SERVICE_NAME}:${SERVICE_PORT}/${APP_NAME}/api/health"
+          health_url="http://${SERVICE_NAME}:${SERVICE_PORT}/api/${APP_NAME}/health"
           echo "Healthcheck URL: $health_url"
           cleanup
 
