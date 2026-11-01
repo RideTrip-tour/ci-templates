@@ -27,9 +27,7 @@ on:
       SWARM_USER:
         required: true
       SWARM_KNOWN_HOSTS:
-        required: true
-      DOCKERHUB_USERNAME:
-        required: true
+        required: true    
       DOCKERHUB_TOKEN:
         required: true
 
