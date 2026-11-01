@@ -24,9 +24,9 @@ on:
       DOCKERHUB_TOKEN:
         required: true
     outputs:
-      image-ref:
+      image_ref:
         description: Immutable SHA-based Docker image reference
-        value: ${{ jobs.build.outputs.image-ref }}
+        value: ${{ jobs.build.outputs.image_ref }}
 
 jobs:
   build:
@@ -34,7 +34,7 @@ jobs:
     permissions:
       contents: read
     outputs:
-      image-ref: ${{ steps.image.outputs.ref }}
+      image_ref: ${{ steps.image.outputs.ref }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -72,7 +72,7 @@ jobs:
     steps:
       - name: Verify job output
         env:
-          IMAGE_REF: ${{ needs.build.outputs.image-ref }}
+          IMAGE_REF: ${{ needs.build.outputs.image_ref }}
         run: |
           set -euo pipefail
           echo "Job output: $IMAGE_REF"
