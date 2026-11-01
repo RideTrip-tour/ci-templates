@@ -35,13 +35,13 @@ jobs:
       postgres:
         image: ${{ inputs.postgres-image }}
         env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: test
+          POSTGRES_USER: platform
+          POSTGRES_PASSWORD: 12345
+          POSTGRES_DB: rrt
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U test -d test"
+          --health-cmd "pg_isready -U platform -d rrt"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 5
