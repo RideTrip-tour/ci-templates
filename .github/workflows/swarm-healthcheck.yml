@@ -65,7 +65,7 @@ jobs:
           cleanup() { docker --context swarm service rm "$health_job" >/dev/null 2>&1 || true; }
           trap cleanup EXIT
           cleanup
-          health_url="http://${SERVICE_NAME}:${SERVICE_PORT}/${APP_NAME}/health"
+          health_url="http://${SERVICE_NAME}:${SERVICE_PORT}/${APP_NAME}/api/health"
           echo "Healthcheck URL: $health_url"
           docker --context swarm service create \
             --name "$health_job" \
